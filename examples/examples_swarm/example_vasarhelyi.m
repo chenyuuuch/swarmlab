@@ -1,7 +1,12 @@
+function example_vasarhelyi(start_t, dur, att_id, vic_id, dev_y, sed, pos_csv, dist_csv, col_csv, info_csv, show_plot)
+% show_plot (optional, default false): draw the swarm animation and record a video
+if nargin < 11
+    show_plot = false;
+end
 %% Clear console and workspace and add project root to path
 
 close all;
-clearvars -except app;
+% clearvars -except app;
 
 project_root = strcat(extractBefore(mfilename('fullpath'),mfilename),'../..');
 addpath(genpath(project_root));
@@ -11,8 +16,8 @@ addpath(genpath(project_root));
 
 DRONE_TYPE = "point_mass"; % swarming mode supports only quadcopter and point_mass
 ACTIVE_ENVIRONMENT = true;
-DEBUG = true;
-VIDEO = true;
+DEBUG = show_plot;
+VIDEO = show_plot;
 CENTER_VIEW_ON_SWARM = false;
 SWARM_ALGORITHM = "vasarhelyi"; % either vasarhelyi or olfati_saber
 
@@ -21,13 +26,13 @@ if DEBUG || VIDEO
     date_string = datestr(now,'yyyy_mm_dd_HH_MM_SS');
     subfolder = strcat(erase(mfilename,"example_"), '_', date_string);
     results_dirname = strcat(results_dirname, '/', subfolder);
+% Comment fuzzing, when in server
     if ~exist(results_dirname, 'dir')
         mkdir(results_dirname)
     end
 end
 
 fontsize = 12;
-
 
 %% Get changes from GUI
 
@@ -59,6 +64,8 @@ end
 
 
 %% Call parameters files
+% set the seed
+p_swarm.seed = sed;
 
 run('param_sim');
 run('param_battery');
@@ -73,6 +80,7 @@ run('param_swarm');
 
 
 %% Init Swarm object, Wind, Viewer and other variables
+
 
 % Init swarm and set positions
 swarm = Swarm();
@@ -91,7 +99,6 @@ wind = zeros(6,1); % steady wind (1:3), wind gusts (3:6)
 x0 = [p_swarm.Pos0; zeros(3,p_swarm.nb_agents)];
 x_history(1,:) = x0(:);
 
-% Init video
 if VIDEO    
     video_filename = strcat(erase(mfilename, "example_"), '_', date_string);
     video_filepath = strcat(results_dirname, '/', video_filename);
@@ -99,13 +106,16 @@ if VIDEO
 end
 
 % Init viewer
+if VIDEO
 swarm_viewer = SwarmViewer(p_sim.dt_plot, CENTER_VIEW_ON_SWARM);
 swarm_viewer.viewer_type = SWARM_VIEWER_TYPE;
+end
 states_handle = [];
 
 
 %% Main simulation loop
 
+append_csv_row(); % close any csv left open by an interrupted run
 disp('Type CTRL-C to exit');
 for time = p_sim.start_time:p_sim.dt:p_sim.end_time
     
@@ -133,9 +143,12 @@ for time = p_sim.start_time:p_sim.dt:p_sim.end_time
         orientation = app.orientation;
         p_swarm.u_ref = [-cosd(orientation), -sind(orientation), 0]';
     end
-
+    
+% ----------------------
+%     attack(time);
+% ----------------------
     % Compute velocity commands from swarming algorithm
-    [vel_c,collisions] = swarm.update_command(p_swarm, p_swarm.r_coll, p_sim.dt);
+    [vel_c,collisions] = swarm.update_command(p_swarm, p_swarm.r_coll, p_sim.dt, time, start_t, dur, att_id, vic_id, dev_y, pos_csv, dist_csv, col_csv, info_csv);
     
     % Update swarm states and plot the drones
     swarm.update_state(wind, time);
@@ -151,58 +164,62 @@ for time = p_sim.start_time:p_sim.dt:p_sim.end_time
         swarm_viewer.update(time, swarm, map);
         video.update(time, swarm_viewer.figure_handle);  
     end
-    
+
 end
 
+% Flush and close the recorded csv files
+append_csv_row();
+
 if VIDEO
-    video.close(); 
+    video.close();
 end
 
 % Close all plots
 close all;
 
-if DEBUG && ~isempty(results_dirname)
-    %% Plot offline viewer
-    
-    SwarmViewerOffline(p_sim.dt_video, ...
-        CENTER_VIEW_ON_SWARM, p_sim.dt, swarm, map);
-    
-    %% Analyse swarm state variables
-    
-    time_history = p_sim.start_time:p_sim.dt:p_sim.end_time;
-    pos_ned_history = swarm.get_pos_ned_history();
-    pos_ned_history = pos_ned_history(2:end,:);
-    vel_ned_history = swarm.get_vel_xyz_history();
-    accel_history = [zeros(1, p_swarm.nb_agents*3); ...
-        diff(vel_ned_history,1)/p_sim.dt];
-    
-    % Save workspace
-    wokspace_path = strcat(results_dirname,'/state_var');
-    save(wokspace_path,'time_history','pos_ned_history','vel_ned_history', ...
-        'accel_history');
-    
-    % Plot state variables
-    agents_color = swarm.get_colors();
-    lines_color = [];
-
-    plot_state_offline(time_history', pos_ned_history, vel_ned_history, ...
-        accel_history, agents_color, p_swarm, map, fontsize, lines_color, ...
-        results_dirname);
-
-    
-    %% Analyse performance
-    
-    % Compute swarm performance
-    [safety, order, union, alg_conn, safety_obs, min_d_obs] = ...
-        compute_swarm_performance(pos_ned_history, vel_ned_history, ...
-        p_swarm, results_dirname);
-    
-    % Plot performance
-    [perf_handle] = plot_swarm_performance(time_history', safety, order, ...
-        union, alg_conn, safety_obs, min_d_obs, p_swarm, fontsize, results_dirname);
-    
-    
-end
+% if DEBUG && ~isempty(results_dirname)
+%     %% Plot offline viewer
+%     
+%     SwarmViewerOffline(p_sim.dt_video, ...
+%         CENTER_VIEW_ON_SWARM, p_sim.dt, swarm, map);
+%     
+%     %% Analyse swarm state variables
+%     
+%     time_history = p_sim.start_time:p_sim.dt:p_sim.end_time;
+%     pos_ned_history = swarm.get_pos_ned_history();
+%     pos_ned_history = pos_ned_history(2:end,:);
+%     vel_ned_history = swarm.get_vel_xyz_history();
+%     accel_history = [zeros(1, p_swarm.nb_agents*3); ...
+%         diff(vel_ned_history,1)/p_sim.dt];
+%     
+%     % Save workspace
+%     wokspace_path = strcat(results_dirname,'/state_var');
+%     save(wokspace_path,'time_history','pos_ned_history','vel_ned_history', ...
+%         'accel_history');
+%     
+%     % Plot state variables
+%     agents_color = swarm.get_colors();
+%     lines_color = [];
+% 
+%     plot_state_offline(time_history', pos_ned_history, vel_ned_history, ...
+%         accel_history, agents_color, p_swarm, map, fontsize, lines_color, ...
+%         results_dirname);
+% 
+%     
+%     %% Analyse performance
+%     
+%     % Compute swarm performance
+%     [safety, order, union, alg_conn, safety_obs, min_d_obs] = ...
+%         compute_swarm_performance(pos_ned_history, vel_ned_history, ...
+%         p_swarm, results_dirname);
+%     
+%     % Plot performance
+%     [perf_handle] = plot_swarm_performance(time_history', safety, order, ...
+%         union, alg_conn, safety_obs, min_d_obs, p_swarm, fontsize, results_dirname);
+%     
+%     
+% end
 
 
 disp('Simulation completed successfully');
+end

@@ -191,7 +191,6 @@ classdef Swarm < handle
             end
 
         end
-
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function update_state(self, wind, time)
 
@@ -201,11 +200,11 @@ classdef Swarm < handle
         end
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        function [vel_commands, collisions] = update_command(self, p_swarm, r_coll, dt)
+        function [vel_commands, collisions] = update_command(self, p_swarm, r_coll, dt,time, start_t, dur, att_id, vic_id, dev_y, pos_csv, dist_csv, col_csv, info_csv)
 
             % Select the swarm algorithm and call the associated update
             if self.algorithm == "vasarhelyi"
-                [vel_commands, collisions] = self.compute_vel_vasarhelyi(p_swarm, r_coll, dt);
+                [vel_commands, collisions] = self.compute_vel_vasarhelyi(p_swarm, r_coll, dt, time, start_t, dur, att_id, vic_id, dev_y, pos_csv, dist_csv, col_csv, info_csv);
             elseif self.algorithm == "olfati_saber"
                 [vel_commands, collisions] = self.compute_vel_olfati_saber(p_swarm, r_coll, dt);
             end

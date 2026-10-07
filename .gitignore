@@ -42,3 +42,11 @@ octave-workspace
 
 # Custom folder for results
 results*/*
+
+# SwarmFuzz: recorded videos and temporary files (keep the empty folders via test.txt)
+fuzz/results/
+fuzz/velAttack.csv
+fuzz/tmp_files/*
+!fuzz/tmp_files/test.txt
+fuzz/prepare/*
+!fuzz/prepare/test.txt
